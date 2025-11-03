@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 import nibabel as nib
 from dataloaders import dataloader
 from architectures import sfcn_cls, sfcn_ssl2, head, lora_layers
+from nilearn.plotting import plot_stat_map
+
 # Import configuration
 import config as cfg
 
@@ -265,51 +267,38 @@ def save_visualization(heatmap, image, name, output_dir, signed=False, affine=No
     nib.save(heatmap_img, heatmap_nifti_path)
     print(f"Saved heatmap NIfTI: {heatmap_nifti_path}")
     
-    # === PNG visualization (unchanged) ===
-    D, H, W = image.shape
-    slices = {
-        'axial': D // 2,
-        'coronal': H // 2,
-        'sagittal': W // 2
-    }
-    
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    
-    for idx, (view, slice_idx) in enumerate(slices.items()):
-        ax = axes[idx]
-        
-        if view == 'axial':
-            img_slice = image[slice_idx, :, :]
-            heat_slice = heatmap[slice_idx, :, :]
-        elif view == 'coronal':
-            img_slice = image[:, slice_idx, :]
-            heat_slice = heatmap[:, slice_idx, :]
-        else:  # sagittal
-            img_slice = image[:, :, slice_idx]
-            heat_slice = heatmap[:, :, slice_idx]
-        
-        ax.imshow(img_slice.T, cmap='gray', origin='lower')
-        
-        if signed:
-            im = ax.imshow(heat_slice.T, cmap='RdBu_r', alpha=0.5, 
-                          vmin=-np.abs(heat_slice).max(), vmax=np.abs(heat_slice).max(),
-                          origin='lower')
-        else:
-            im = ax.imshow(heat_slice.T, cmap='hot', alpha=0.5, 
-                          vmin=0, vmax=heat_slice.max(),
-                          origin='lower')
-        
-        ax.set_title(f"{view.capitalize()} (slice {slice_idx})", fontsize=12)
-        ax.axis('off')
-    
-    plt.colorbar(im, ax=axes, fraction=0.046, pad=0.04)
-    plt.suptitle(name, fontsize=14, fontweight='bold')
-    plt.tight_layout()
-    
+    # Use niilearn to plot heatmaps
+
+    cmap = "RdBlu_r" if signed else "hot"
+    vmin = np.abs(heat_slice).max() if signed else 0.05 # vmin and vmax are used for the whole 3D image thus also those slices that
+    vmax = np.abs(heat_slice).max() if signed else 0.5  # are not shown. This might lead to very pale heatmaps => reducing vmax to 0.5
+
+    plot_stat_map(heatmap_img, 
+            bg_img=brain_img,
+            # cut_coords=[48,48,48], # If set to this the center coordinates are choosen, otherwise the region with highest weight
+            radiological=True, # R/L are switched 
+            cmap=cmap, 
+            black_bg=True, 
+            annotate=True, 
+            draw_cross=False,
+            # alpha=0.5, 
+            # transparency_range=[0.5,1],
+            transparency=0.8, # heatmap_img[0],
+            title=f"{subtest.upper()}",
+            threshold=0.05,
+            vmin=0.05,
+            vmax=0.5
+            )
+    # plt.show()
     save_path = os.path.join(output_dir, f"{name}.png")
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
     plt.close()
     print(f"Saved PNG: {save_path}")
+
+
+ 
+
+
 
 
 def generate_heatmaps(heatmap_dir, attention_method='gradcam', 
