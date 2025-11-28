@@ -280,11 +280,11 @@ def save_visualization(heatmap, image, name, output_dir, signed=False, affine=No
             cmap=cmap, 
             black_bg=True, 
             annotate=True, 
-            draw_cross=False,
+            draw_cross=True,
             # alpha=0.5, 
             # transparency_range=[0.5,1],
             transparency=0.8, # heatmap_img[0],
-            title=f"{subtest.upper()}",
+            title=f"{name}", 
             threshold=0.05,
             vmin=0.05,
             vmax=0.5
@@ -303,7 +303,7 @@ def save_visualization(heatmap, image, name, output_dir, signed=False, affine=No
 
 def generate_heatmaps(heatmap_dir, attention_method='gradcam', 
                       attention_mode='magnitude', mode='top_individual', top_n=5, 
-                      attention_target='logit_diff', attention_class_idx=None):
+                      attention_target='logit_diff', attention_class_idx=None, selected_eid=None):
     """
     Main function to generate heatmaps
     
@@ -315,6 +315,7 @@ def generate_heatmaps(heatmap_dir, attention_method='gradcam',
         top_n: Number of top samples to visualize
         attention_target: 'logit_diff', 'pred', or 'target_class'
         attention_class_idx: Target class index (only for 'target_class')
+        selected_eid: select eids to create heatmaps, will override top_n, and mode
     """
     device = cfg.DEVICE
     
@@ -355,7 +356,16 @@ def generate_heatmaps(heatmap_dir, attention_method='gradcam',
     # Process images
     results = []
     signed = (attention_mode == 'signed')
-    
+    if not selected_eid is None:
+        selected_eid = [int(i) for i in selected_eid]
+        df = df.query('eid in @selected_eid')
+        top_n = len(df)
+        mode = 'selected_individual'
+        print(f"running for selected individuals: {selected_eid}")
+        print(f"Changed Visualization mode to: {mode}")
+
+    print(df)
+
     print("\nGenerating heatmaps...")
     for idx, row in tqdm(df.iterrows(), total=len(df), desc="Processing"):
         eid = str(row['eid'])
@@ -406,9 +416,10 @@ def generate_heatmaps(heatmap_dir, attention_method='gradcam',
     if mode == 'single':
         result = results[0]
         save_visualization(
-            result['heatmap'], result['image'],
-            f"single_{result['eid']}_pred{result['pred_class']}_conf{result['confidence']:.3f}",
-            heatmap_dir,
+            heatmap=result['heatmap'], 
+            image=result['image'],
+            name=f"single_{result['eid']}_pred{result['pred_class']}_conf{result['confidence']:.3f}",
+            output_dir=heatmap_dir,
             signed=signed
         )
     
@@ -434,7 +445,18 @@ def generate_heatmaps(heatmap_dir, attention_method='gradcam',
                 heatmap_dir,
                 signed=signed
             )
-    
+    elif mode == 'selected_individual':
+        # Get top confident predictions for class 1
+        positive_results = [r for r in results if r['pred_class'] == 1]
+        top_positive = sorted(positive_results, key=lambda x: x['confidence'], reverse=True)[:top_n]
+        
+        for i, result in enumerate(top_positive):
+            save_visualization(
+                result['heatmap'], result['image'],
+                f"{result['eid']}_conf{result['confidence']:.3f}",
+                heatmap_dir,
+                signed=signed
+            )  
     # Save summary
     summary_df = pd.DataFrame([{
         'eid': r['eid'],
@@ -454,6 +476,13 @@ def generate_heatmaps(heatmap_dir, attention_method='gradcam',
 
 def main():
     """Main function"""
+    import argparse
+
+    eid = None
+    if 'EIDS' in cfg.__dict__:
+        eid = cfg.EIDS
+
+
     # Setup
     if torch.cuda.is_available():
         torch.cuda.set_device(cfg.DEVICE)
@@ -469,9 +498,9 @@ def main():
     print("="*70)
     
     # Set heatmap parameters (modify these as needed)
-    attention_method = cfg.ATTENTION_METHOD      # Options: 'gradcam', 'saliency'
+    attention_method = cfg.ATTENTION_METHOD  # Options: 'gradcam', 'saliency'
     attention_mode = cfg.ATTENTION_MODE      # Options: 'magnitude', 'signed'
-    mode = cfg.HEATMAP_MODE       # Options: 'single', 'average', 'top_individual'
+    mode = cfg.HEATMAP_MODE                  # Options: 'single', 'average', 'top_individual'
     top_n = cfg.HEATMAP_TOP_N
     explainability_path = f'{cfg.COLUMN_NAME}/{cfg.TEST_COHORT}/{cfg.TRAINING_MODE}/{cfg.ATTENTION_METHOD}/{cfg.ATTENTION_MODE}/{cfg.EXPERIMENT_NAME}'
     
@@ -486,11 +515,12 @@ def main():
         mode=mode,
         top_n=top_n,
         attention_target='logit_diff',
-        attention_class_idx=None
+        attention_class_idx=None,
+        selected_eid=eid
     )
     
     print("\n✓ All done!")
 
 
 if __name__ == "__main__":
-    main()
+   main()

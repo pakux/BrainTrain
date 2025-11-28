@@ -8,16 +8,17 @@ parser = argparse.ArgumentParser(description='run training')
 parser.add_argument('-c', '--column', type=str,  default=None, help='Select one  target column for trainig')
 parser.add_argument('-m', '--mode', type=str,  default=None, help='Select one of sfcn, dense, linear, ssl-finetuned, lora')
 parser.add_argument('-g', '--gpu', type=str,  default=None, help='Select one of sfcn, dense, linear, ssl-finetuned, lora')
+parser.add_argument('-i', '--eid', type=str, nargs='*', default=None, help='Create heatmaps for selected eid')
 args = parser.parse_args()
 
-
+EIDS = args.eid
 
 # ============================================================================
 # BASIC SETTINGS
 # ============================================================================
 COLUMN_NAME = 'last_progression_pst_15z'
 CSV_NAME = 'last_progression_pst_15z'
-TRAINING_MODE = 'ssl-finetuned'  # Options: 'sfcn', 'dense', 'linear', 'ssl-finetuned', 'lora'
+TRAINING_MODE = 'linear'  # Options: 'sfcn', 'dense', 'linear', 'ssl-finetuned', 'lora'
 TASK = 'classification'
 
 if not args.column is None:
@@ -27,7 +28,7 @@ if not args.column is None:
 if not args.mode is None:
     TRAINING_MODE = args.mode
 
- ============================================================================
+# ============================================================================
 # DATA PATHS
 # ============================================================================
 
